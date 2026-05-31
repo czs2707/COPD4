@@ -1,6 +1,10 @@
 """
 COPD-HFpEF Comorbidity Risk Prediction Model
-Root entry point for Streamlit Cloud deployment
+Based on: Development and external validation of an interpretable 
+machine-learning model for HFpEF comorbidity risk in COPD patients
+Published in: Respiratory Research (2026)
+
+Streamlit Cloud Deployment: Upload this app folder to GitHub and deploy via share.streamlit.io
 """
 
 import streamlit as st
@@ -11,25 +15,20 @@ import shap
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score
 from sklearn.calibration import calibration_curve
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# ========== Load Model ==========
-@st.cache_resource
-def load_model():
-    """Load the trained XGBoost model"""
-    model = joblib.load('app/models/xgboost_best_model.pkl')
-    return model
-
-@st.cache_data
-def load_test_data():
-    """Load test data for model performance visualization"""
-    X_test = pd.read_csv('app/data/X_test.csv')
-    y_test = pd.read_csv('app/data/y_test.csv').values.ravel()
-    return X_test, y_test
+# Detect if running on Streamlit Cloud vs local
+def get_path(filename):
+    """Get correct path for both local and Streamlit Cloud"""
+    # Try app subdirectory first (for Streamlit Cloud when app.py is in /app folder)
+    if os.path.exists(f'app/{filename}'):
+        return f'app/{filename}'
+    # Fallback to same directory (for local development)
+    return filename
 
 # Page configuration
 st.set_page_config(
@@ -128,6 +127,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ========== Load Model ==========
+@st.cache_resource
+def load_model():
+    """Load the trained XGBoost model"""
+    model_path = get_path('models/xgboost_best_model.pkl')
+    model = joblib.load(model_path)
+    return model
+
+@st.cache_data
+def load_test_data():
+    """Load test data for model performance visualization"""
+    X_test = pd.read_csv(get_path('data/X_test.csv'))
+    y_test = pd.read_csv(get_path('data/y_test.csv')).values.ravel()
+    return X_test, y_test
+
 # ========== Sidebar Navigation ==========
 st.sidebar.markdown("<div class='sidebar-info'>", unsafe_allow_html=True)
 st.sidebar.title("🫁 Navigation")
@@ -148,6 +162,7 @@ if page == "🏠 Home":
     st.markdown("<div class='main-header'>COPD-HFpEF Comorbidity Risk Predictor</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-header'>Interpretable Machine Learning Model for Early HFpEF Detection in COPD Patients</div>", unsafe_allow_html=True)
     
+    # Hero section with metrics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown("""
@@ -180,6 +195,7 @@ if page == "🏠 Home":
     
     st.markdown("<hr>", unsafe_allow_html=True)
     
+    # Two-column layout
     left_col, right_col = st.columns([3, 2])
     
     with left_col:
@@ -212,6 +228,7 @@ if page == "🏠 Home":
             "A wave": "Late diastolic mitral inflow velocity (cm/s)",
             "CAT score": "COPD Assessment Test score (0-40)"
         }
+        
         for marker, desc in biomarkers.items():
             st.markdown(f"**{marker}**: {desc}")
     
@@ -245,68 +262,108 @@ elif page == "🔮 Risk Prediction":
     st.markdown("<div class='main-header'>🔮 HFpEF Risk Prediction</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-header'>Enter patient clinical parameters to predict HFpEF comorbidity risk</div>", unsafe_allow_html=True)
     
+    # Input form
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.subheader("🩸 Laboratory")
-        nt_probnp = st.number_input("NT-proBNP (pg/mL)", min_value=1.0, max_value=30000.0, value=200.0, step=10.0,
-                                   help="N-terminal pro-B-type natriuretic peptide")
+        nt_probnp = st.number_input(
+            "NT-proBNP (pg/mL)", 
+            min_value=1.0, max_value=30000.0, value=200.0, step=10.0,
+            help="N-terminal pro-B-type natriuretic peptide"
+        )
         st.markdown("<span class='feature-desc'>Normal: <125 pg/mL | Elevated in HF</span>", unsafe_allow_html=True)
         
-        rbc = st.number_input("RBC (×10¹²/L)", min_value=1.0, max_value=8.0, value=4.2, step=0.1,
-                             help="Red Blood Cell count")
+        rbc = st.number_input(
+            "RBC (×10¹²/L)", 
+            min_value=1.0, max_value=8.0, value=4.2, step=0.1,
+            help="Red Blood Cell count"
+        )
         st.markdown("<span class='feature-desc'>Normal: 4.0-5.5 ×10¹²/L</span>", unsafe_allow_html=True)
         
-        fib = st.number_input("Fibrinogen (g/L)", min_value=0.5, max_value=15.0, value=3.2, step=0.1,
-                             help="Inflammatory marker")
+        fib = st.number_input(
+            "Fibrinogen (g/L)", 
+            min_value=0.5, max_value=15.0, value=3.2, step=0.1,
+            help="Inflammatory marker"
+        )
         st.markdown("<span class='feature-desc'>Normal: 2.0-4.0 g/L</span>", unsafe_allow_html=True)
         
-        cho = st.number_input("Cholesterol (mmol/L)", min_value=0.5, max_value=15.0, value=3.7, step=0.1,
-                             help="Total cholesterol")
+        cho = st.number_input(
+            "Cholesterol (mmol/L)", 
+            min_value=0.5, max_value=15.0, value=3.7, step=0.1,
+            help="Total cholesterol"
+        )
         st.markdown("<span class='feature-desc'>Normal: <5.2 mmol/L</span>", unsafe_allow_html=True)
     
     with col2:
         st.subheader("🫁 Pulmonary Function")
-        pao2 = st.number_input("PaO₂ (mmHg)", min_value=20.0, max_value=150.0, value=70.0, step=1.0,
-                              help="Arterial partial pressure of oxygen")
+        pao2 = st.number_input(
+            "PaO₂ (mmHg)", 
+            min_value=20.0, max_value=150.0, value=70.0, step=1.0,
+            help="Arterial partial pressure of oxygen"
+        )
         st.markdown("<span class='feature-desc'>Normal: 80-100 mmHg</span>", unsafe_allow_html=True)
         
-        ic = st.number_input("IC (L)", min_value=0.1, max_value=8.0, value=2.0, step=0.1,
-                            help="Inspiratory Capacity")
+        ic = st.number_input(
+            "IC (L)", 
+            min_value=0.1, max_value=8.0, value=2.0, step=0.1,
+            help="Inspiratory Capacity"
+        )
         st.markdown("<span class='feature-desc'>Normal: ~3.5 L (males)</span>", unsafe_allow_html=True)
         
-        ic_pct = st.number_input("IC% predicted (%)", min_value=5.0, max_value=150.0, value=65.0, step=1.0,
-                                help="Inspiratory Capacity % of predicted")
+        ic_pct = st.number_input(
+            "IC% predicted (%)", 
+            min_value=5.0, max_value=150.0, value=65.0, step=1.0,
+            help="Inspiratory Capacity % of predicted"
+        )
         st.markdown("<span class='feature-desc'>Normal: >80%</span>", unsafe_allow_html=True)
     
     with col3:
         st.subheader("🫀 Cardiac / Symptoms")
-        a_wave = st.number_input("A wave (cm/s)", min_value=20.0, max_value=200.0, value=85.0, step=1.0,
-                                help="Late diastolic mitral inflow velocity")
+        a_wave = st.number_input(
+            "A wave (cm/s)", 
+            min_value=20.0, max_value=200.0, value=85.0, step=1.0,
+            help="Late diastolic mitral inflow velocity"
+        )
         st.markdown("<span class='feature-desc'>Normal: <80 cm/s</span>", unsafe_allow_html=True)
         
-        cat_score = st.number_input("CAT Score", min_value=0, max_value=40, value=22, step=1,
-                                   help="COPD Assessment Test (0-40)")
+        cat_score = st.number_input(
+            "CAT Score", 
+            min_value=0, max_value=40, value=22, step=1,
+            help="COPD Assessment Test (0-40)"
+        )
         st.markdown("<span class='feature-desc'>0=Best, 40=Worst | ≥20 high impact</span>", unsafe_allow_html=True)
     
     st.markdown("<hr>", unsafe_allow_html=True)
     
+    # Predict button
     predict_col, _, _ = st.columns([1, 1, 1])
     with predict_col:
         predict_btn = st.button("🚀 Predict HFpEF Risk", use_container_width=True)
     
     if predict_btn:
         try:
+            # Load model
             model = load_model()
             
+            # Prepare input data
             input_data = pd.DataFrame({
-                'NT_proBNP': [nt_probnp], 'RBC': [rbc], 'FIB': [fib], 'CHO': [cho],
-                'PaO2': [pao2], 'IC': [ic], 'IC_pct_pred': [ic_pct], 'A_wave': [a_wave], 'CAT_score': [cat_score]
+                'NT_proBNP': [nt_probnp],
+                'RBC': [rbc],
+                'FIB': [fib],
+                'CHO': [cho],
+                'PaO2': [pao2],
+                'IC': [ic],
+                'IC_pct_pred': [ic_pct],
+                'A_wave': [a_wave],
+                'CAT_score': [cat_score]
             })
             
+            # Predict
             probability = model.predict_proba(input_data)[0, 1]
             prediction = model.predict(input_data)[0]
             
+            # Display results
             st.markdown("<hr>", unsafe_allow_html=True)
             
             result_col1, result_col2 = st.columns([1, 1])
@@ -314,6 +371,7 @@ elif page == "🔮 Risk Prediction":
             with result_col1:
                 st.subheader("📊 Prediction Result")
                 
+                # Risk stratification
                 if probability >= 0.7:
                     risk_class = "HIGH RISK"
                     risk_color = "risk-high"
@@ -335,27 +393,36 @@ elif page == "🔮 Risk Prediction":
                 """, unsafe_allow_html=True)
                 
                 st.write(risk_advice)
+                
+                # Progress bar
                 st.progress(float(probability))
                 st.caption(f"Probability: {probability:.4f} (threshold: 0.5)")
             
             with result_col2:
                 st.subheader("🔍 Key Contributing Factors")
                 
+                # SHAP explanation
                 explainer = shap.TreeExplainer(model)
                 shap_vals = explainer.shap_values(input_data)
                 
+                # Create waterfall plot
                 fig, ax = plt.subplots(figsize=(10, 6))
                 shap.plots.waterfall(shap.Explanation(
-                    values=shap_vals[0], base_values=explainer.expected_value,
-                    data=input_data.iloc[0], feature_names=input_data.columns
+                    values=shap_vals[0],
+                    base_values=explainer.expected_value,
+                    data=input_data.iloc[0],
+                    feature_names=input_data.columns
                 ), show=False)
                 plt.title('SHAP Explanation for This Patient', fontsize=13, fontweight='bold')
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close()
             
+            # Clinical interpretation
             st.subheader("📝 Clinical Interpretation")
+            
             interp_col1, interp_col2 = st.columns(2)
+            
             with interp_col1:
                 st.markdown("""
                 **🫁 Pulmonary Factors:**
@@ -363,6 +430,7 @@ elif page == "🔮 Risk Prediction":
                 - **Reduced IC**: Signals lung hyperinflation, an early COPD indicator
                 - **Low PaO₂**: Chronic hypoxia promotes pulmonary vascular remodeling
                 """)
+            
             with interp_col2:
                 st.markdown("""
                 **🫀 Cardiac Factors:**
@@ -386,6 +454,7 @@ elif page == "📊 Model Performance":
         y_prob = model.predict_proba(X_test)[:, 1]
         y_pred = model.predict(X_test)
         
+        # Performance metrics
         auc = roc_auc_score(y_test, y_prob)
         acc = accuracy_score(y_test, y_pred)
         tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
@@ -395,11 +464,19 @@ elif page == "📊 Model Performance":
         npv = tn / (tn + fn) if (tn + fn) > 0 else 0
         f1 = 2 * (ppv * sens) / (ppv + sens) if (ppv + sens) > 0 else 0
         
+        # Display metrics
         st.subheader("📈 Performance Metrics (Internal Validation)")
         m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
         
-        metrics_data = [("AUC", f"{auc:.3f}"), ("Accuracy", f"{acc:.3f}"), ("Sensitivity", f"{sens:.3f}"),
-                       ("Specificity", f"{spec:.3f}"), ("PPV", f"{ppv:.3f}"), ("NPV", f"{npv:.3f}"), ("F1-Score", f"{f1:.3f}")]
+        metrics_data = [
+            ("AUC", f"{auc:.3f}"),
+            ("Accuracy", f"{acc:.3f}"),
+            ("Sensitivity", f"{sens:.3f}"),
+            ("Specificity", f"{spec:.3f}"),
+            ("PPV", f"{ppv:.3f}"),
+            ("NPV", f"{npv:.3f}"),
+            ("F1-Score", f"{f1:.3f}")
+        ]
         
         for col, (label, value) in zip([m1, m2, m3, m4, m5, m6, m7], metrics_data):
             col.markdown(f"""
@@ -411,6 +488,7 @@ elif page == "📊 Model Performance":
         
         st.markdown("<hr>", unsafe_allow_html=True)
         
+        # ROC Curve
         st.subheader("📉 ROC Curve")
         fig1, ax1 = plt.subplots(figsize=(10, 8))
         fpr, tpr, _ = roc_curve(y_test, y_prob)
@@ -430,12 +508,14 @@ elif page == "📊 Model Performance":
         
         st.markdown("<hr>", unsafe_allow_html=True)
         
+        # Confusion Matrix and Calibration
         col_cm, col_cal = st.columns(2)
         
         with col_cm:
             st.subheader("🔢 Confusion Matrix")
             fig2, ax2 = plt.subplots(figsize=(7, 6))
             cm = confusion_matrix(y_test, y_pred)
+            import seaborn as sns
             sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax2,
                        xticklabels=['COPD Only', 'COPD+HFpEF'],
                        yticklabels=['COPD Only', 'COPD+HFpEF'],
@@ -467,6 +547,7 @@ elif page == "📊 Model Performance":
         
         st.markdown("<hr>", unsafe_allow_html=True)
         
+        # Decision Curve Analysis
         st.subheader("📊 Decision Curve Analysis (DCA)")
         fig4, ax4 = plt.subplots(figsize=(10, 6))
         
@@ -520,6 +601,7 @@ elif page == "🔍 SHAP Interpretation":
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)
         
+        # Feature importance (bar)
         st.subheader("📊 Global Feature Importance (Mean |SHAP|)")
         fig1, ax1 = plt.subplots(figsize=(10, 7))
         shap.summary_plot(shap_values, X_test, plot_type="bar", show=False, color='#1f4e79')
@@ -535,6 +617,7 @@ elif page == "🔍 SHAP Interpretation":
         
         st.markdown("<hr>", unsafe_allow_html=True)
         
+        # Bee swarm plot
         st.subheader("🐝 SHAP Distribution (Beeswarm Plot)")
         fig2, ax2 = plt.subplots(figsize=(10, 8))
         shap.summary_plot(shap_values, X_test, show=False)
@@ -550,6 +633,7 @@ elif page == "🔍 SHAP Interpretation":
         
         st.markdown("<hr>", unsafe_allow_html=True)
         
+        # Individual patient selector
         st.subheader("👤 Individual Patient SHAP Analysis")
         patient_options = [f"Patient {i} ({'HFpEF' if y_test[i] == 1 else 'No HFpEF'})" for i in range(len(y_test))]
         selected_patient = st.selectbox("Select a patient:", range(len(patient_options)), 
@@ -557,8 +641,10 @@ elif page == "🔍 SHAP Interpretation":
         
         fig3, ax3 = plt.subplots(figsize=(12, 8))
         shap.plots.waterfall(shap.Explanation(
-            values=shap_values[selected_patient], base_values=explainer.expected_value,
-            data=X_test.iloc[selected_patient], feature_names=X_test.columns
+            values=shap_values[selected_patient],
+            base_values=explainer.expected_value,
+            data=X_test.iloc[selected_patient],
+            feature_names=X_test.columns
         ), show=False)
         plt.title(f'SHAP Waterfall Plot - Patient #{selected_patient}', fontsize=13, fontweight='bold')
         plt.tight_layout()
